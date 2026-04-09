@@ -6,9 +6,9 @@ Created on Wed Apr  8 15:25:40 2026
 @author: loganbattaglia
 """
 
-# Claude script for census! 
-
 """
+DISCLAIMER: This script was made with the help of Claude
+
 fetch_s2701_insurance.py
 -------------------------
 Fetches insured and uninsured ESTIMATE (count) variables from ACS 5-Year

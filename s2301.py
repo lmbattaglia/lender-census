@@ -6,9 +6,9 @@ Created on Tue Apr  7 19:39:44 2026
 @author: loganbattaglia
 """
 
-# Claude script for census! 
-
 """
+DISCLAIMER: This script was made with the help of Claude
+
 fetch_s2301_full.py
 --------------------
 Fetches ALL estimate variables from ACS 5-Year Estimates Table S2301
