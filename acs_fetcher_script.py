@@ -9,7 +9,7 @@ Created on Wed Apr  8 22:07:57 2026
 """
 DISCLAIMER: This script was made with the help of Claude
 
-fetch_acs_subject_table.py
+acs_fetcher_script.py
 ---------------------------
 A general-purpose fetcher for any ACS 5-Year Subject Table (S-tables).
 Pulls all estimate variables for five fixed geographies across a range of
