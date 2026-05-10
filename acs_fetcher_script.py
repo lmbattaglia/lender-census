@@ -130,9 +130,30 @@ GEOGRAPHIES = [
 # restrict which column groups are fetched. An empty set means "all groups".
 KEEP_GROUPS: set[str] = set()
 
-# API constants
-BASE_URL   = "https://api.census.gov/data/{year}/acs/acs5/subject"
-GROUPS_URL = "https://api.census.gov/data/{year}/acs/acs5/subject/groups/{table}.json"
+# Remove the hardcoded constants and replace with a function:
+_ENDPOINTS = {
+    "S": "subject",
+    "B": "",        # B-tables: no sub-path
+    "C": "",        # C-tables (collapsed): same endpoint as B
+    "DP": "profile",
+    "CP": "cprofile",
+}
+
+def get_endpoint(table_id: str) -> str:
+    prefix = table_id[:2].upper()
+    if prefix in _ENDPOINTS:
+        ep = _ENDPOINTS[prefix]
+    else:
+        ep = _ENDPOINTS.get(table_id[0].upper(), "")
+    return ep
+
+def make_urls(year: int, table: str) -> tuple[str, str]:
+    ep = get_endpoint(table)
+    base = f"https://api.census.gov/data/{year}/acs/acs5"
+    if ep:
+        base += f"/{ep}"
+    groups = f"{base}/groups/{table}.json"
+    return base, groups
 
 SENTINELS = {-666666666.0, -555555555.0, -333333333.0,
              -222222222.0, -888888888.0, -999999999.0}
@@ -200,9 +221,9 @@ def fetch_schema(year: int, table: str, api_key: str
 
     Exits with an informative message if the table does not exist for `year`.
     """
-    url = GROUPS_URL.format(year=year, table=table)
+    _, groups_url = make_urls(year, table)
     try:
-        resp = requests.get(url, params={"key": api_key}, timeout=30)
+        resp = requests.get(groups_url, params={"key": api_key}, timeout=30)
         if resp.status_code == 404:
             return [], {}, {}   # table does not exist this year — caller skips
         resp.raise_for_status()
@@ -262,7 +283,7 @@ def fetch_year_valid_vars(year: int, latest_year: int, table: str,
     if year == latest_year:
         return set(canonical_set), set()   # pred_types handled from canonical
 
-    url = GROUPS_URL.format(year=year, table=table)
+    _, url = make_urls(year, table)
     try:
         resp = requests.get(url, params={"key": api_key}, timeout=30)
         if resp.status_code == 404:
@@ -327,7 +348,7 @@ def parse_row(data: list | None, requested: list[str]) -> dict[str, float | None
     return result
 
 
-def fetch_geo(year: int, geo_params: dict, valid_vars: list[str],
+def fetch_geo(year: int, table: str, geo_params: dict, valid_vars: list[str],
               api_key: str) -> dict[str, float | None]:
     """
     Fetch all valid_vars for one geography in one year, batched to stay
@@ -335,7 +356,7 @@ def fetch_geo(year: int, geo_params: dict, valid_vars: list[str],
     Each batch builds a completely fresh params dict to prevent leakage.
     """
     result: dict[str, float | None] = {v: None for v in valid_vars}
-    base = BASE_URL.format(year=year)
+    base, _ = make_urls(year, table)
 
     for i in range(0, len(valid_vars), MAX_PER_CALL):
         batch  = valid_vars[i : i + MAX_PER_CALL]
@@ -351,24 +372,24 @@ def fetch_geo(year: int, geo_params: dict, valid_vars: list[str],
 # STEP 4 — PER-GEOGRAPHY FETCH FUNCTIONS
 # ---------------------------------------------------------------------------
 
-def fetch_syracuse(year, valid_vars, api_key):
-    return fetch_geo(year,
+def fetch_syracuse(year, table, valid_vars, api_key):
+    return fetch_geo(year, table,
                      {"for": f"place:{SYRACUSE_PLACE}", "in": f"state:{STATE_FIPS}"},
                      valid_vars, api_key)
 
-def fetch_onondaga(year, valid_vars, api_key):
-    return fetch_geo(year,
+def fetch_onondaga(year, table, valid_vars, api_key):
+    return fetch_geo(year, table,
                      {"for": f"county:{ONONDAGA_FIPS}", "in": f"state:{STATE_FIPS}"},
                      valid_vars, api_key)
 
-def fetch_new_york(year, valid_vars, api_key):
-    return fetch_geo(year, {"for": f"state:{STATE_FIPS}"}, valid_vars, api_key)
+def fetch_new_york(year, table, valid_vars, api_key):
+    return fetch_geo(year, table, {"for": f"state:{STATE_FIPS}"}, valid_vars, api_key)
 
-def fetch_us(year, valid_vars, api_key):
-    return fetch_geo(year, {"for": "us:1"}, valid_vars, api_key)
+def fetch_us(year, table, valid_vars, api_key):
+    return fetch_geo(year, table, {"for": "us:1"}, valid_vars, api_key)
 
 
-def fetch_cny(year: int, valid_vars: list[str], api_key: str,
+def fetch_cny(year: int, table: str, valid_vars: list[str], api_key: str,
               pred_types: dict[str, str]) -> dict[str, float | None]:
     """
     Aggregate five CNY counties into a single Central New York value.
@@ -386,7 +407,7 @@ def fetch_cny(year: int, valid_vars: list[str], api_key: str,
     """
     county_data: list[dict] = []
     for name, fips in CNY_COUNTIES.items():
-        row = fetch_geo(year,
+        row = fetch_geo(year, table,
                         {"for": f"county:{fips}", "in": f"state:{STATE_FIPS}"},
                         valid_vars, api_key)
         county_data.append(row)
@@ -461,9 +482,9 @@ def collect_data(canonical_vars: list[str], canonical_set: set[str],
             print(f"  {geo} ...", flush=True)
 
             if geo == "Central New York":
-                values = fetch_cny(year, valid_vars, api_key, pred_types)
+                values = fetch_cny(year, table, valid_vars, api_key, pred_types)
             else:
-                values = FETCH_FUNCS[geo](year, valid_vars, api_key)
+                values = FETCH_FUNCS[geo](year, table, valid_vars, api_key)
 
             row = {"Geography": geo, "Year": year}
             for var in canonical_vars:
